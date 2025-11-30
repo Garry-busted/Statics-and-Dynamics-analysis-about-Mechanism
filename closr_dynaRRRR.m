@@ -78,35 +78,6 @@ for i = 1:length(t2)
     [F12x(i), F12y(i), F23x(i), F23y(i), F34x(i), F34y(i), F14x(i), F14y(i), M12(i), Fs(i), alphas(i), Ms(i), F32(i), A, ag2(i), ag3(i), ag4(i)] = dynaRRRR(r1,r2,r3,r4,b2,b3,b4,t2(i),t3(i),t4(i),t2d,t3d(i),t4d(i),t3dd(i),t4dd(i),phi2,phi3,phi4,m2,m3,m4,I3,I4);
 end
 
-%% 模組化動力分析
-for i = 1:length(t2)
-    % 1. 執行模組計算 (記得輸入 r3)
-    [L4(i),L3(i),h4(i),h3(i),Q(i),P(i),tQ(i),tP(i),ag2_m(i),ag3_m(i),d2(i),d3(i)] = preForceRR(r4,t4(i),t3(i),phi4,phi3,m4,m3,b4,b3,I4,I3,t4d(i),t3d(i),t4dd(i),t3dd(i),r3);
-    [F34_m(i),F34t_m(i),F34n_m(i),Fex_m(i),Fey_m(i),F14x_m(i),F14y_m(i)] = ForceRR(P(i),Q(i),0,0,r4,r3,L4(i),L3(i),h4(i),h3(i),t4(i),t3(i),tP(i),tQ(i));
-    
-    Fe_m(i) = sqrt(Fex_m(i)^2 + Fey_m(i)^2);
-    
-    % 2. 計算 M12 (修正符號: rx*Fy - ry*Fx)
-    % r_x = r2*cos(t2), r_y = r2*sin(t2)
-    M12_m(i) = -(r2*cos(t2(i))) * Fey_m(i) + (r2*sin(t2(i))) * Fex_m(i);
-    
-    % 3. 計算 F12 (修正符號: F12 = Fex + m*a)
-    % 需重新計算 Link 2 加速度向量
-    ag2x_current = -b2 * t2d^2 * cos(t2(i) + phi2) - b2 * t2dd * sin(t2(i) + phi2);
-    ag2y_current = -b2 * t2d^2 * sin(t2(i) + phi2) + b2 * t2dd * cos(t2(i) + phi2);
-    
-    % 1128：改質心加速度的負號就結束了
-    F12x_m(i) = Fex_m(i) - m2 * ag2x_current;
-    F12y_m(i) = Fey_m(i) - m2 * ag2y_current;
-    
-    % 4. 計算搖撼力與力矩 (公式不變，但依賴於修正後的 F12, M12)
-    Fs_m(i) = sqrt((F12x_m(i) + F14x_m(i))^2 + (F12y_m(i) + F14y_m(i))^2);
-    alphas_m(i) = atan2(F12y_m(i) + F14y_m(i), F12x_m(i) + F14x_m(i)) * 180 / pi;
-    
-    % Ms = -M12 + r1*F14y
-    Ms_m(i) = -M12_m(i) + F14y_m(i) * r1; 
-end
-
 %% 畫圖
 figure;
 subplot(3,2,2);
@@ -169,7 +140,6 @@ subplot(3,2,1);
 hold on;
 grid on;
 plot(theta2, Fs);
-plot(theta2, Fs_m, 'r-');
 hold off;
 title('搖撼力 (F_s)');
 xlabel('輸入搖桿角度 \theta_2 (度)');
@@ -179,7 +149,6 @@ subplot(3,2,2);
 hold on;
 grid on;
 plot(theta2, Ms);
-plot(theta2, Ms_m, 'r-');
 hold off;
 title('搖撼力矩 (M_s)');
 xlabel('輸入搖桿角度 \theta_2 (度)');
@@ -189,7 +158,6 @@ subplot(3,2,3);
 hold on;
 grid on;
 plot(theta2, M12);
-plot(theta2, M12_m, '-r');
 hold off;
 title('驅動力矩 (M_{12})');
 xlabel('輸入搖桿角度 \theta_2 (度)');
@@ -199,7 +167,6 @@ subplot(3,2,4);
 hold on;
 grid on;
 plot(theta2, F32);
-plot(theta2, Fe_m, '-r');
 hold off;
 title('玄轉接頭受力 (F_{32})');
 xlabel('輸入搖桿角度 \theta_2 (度)');
@@ -209,146 +176,13 @@ subplot(3,2,5);
 hold on;
 grid on;
 plot(theta2, alphas, '--b');
-plot(theta2, alphas_m, '--r');
 hold off;
 title('搖撼力夾角 (\alpha_s)');
 xlabel('輸入搖桿角度 \theta_2 (度)');
 ylabel('\alpha_s ()');
 
-% 模組化圖形驗證
-figure;
-subplot(3,2,1);
-hold on;
-grid on;
-plot(theta2, Fs_m);
-hold off;
-title('模組化搖撼力 (F_s)');
-xlabel('輸入搖桿角度 \theta_2 (度)');
-ylabel('F_s ()');
 
-subplot(3,2,2);
-hold on;
-grid on;
-plot(theta2, Ms_m);
-hold off;
-title('搖撼力矩 (M_s)');
-xlabel('輸入搖桿角度 \theta_2 (度)');
-ylabel('M_s ()');
 
-subplot(3,2,3);
-hold on;
-grid on;
-plot(theta2, M12_m, '-r');
-hold off;
-title('模組化驅動力矩 (M_{12})');
-xlabel('輸入搖桿角度 \theta_2 (度)');
-ylabel('M_12 ()');
-
-subplot(3,2,4);
-hold on;
-grid on;
-plot(theta2, Fe_m, '-r');
-hold off;
-title('模組化玄轉接頭受力 (F_{32})');
-xlabel('輸入搖桿角度 \theta_2 (度)');
-ylabel('F_32 ()');
-
-subplot(3,2,5);
-hold on;
-grid on;
-plot(theta2, alphas_m, '--r');
-hold off;
-title('搖撼力夾角 (\alpha_s)');
-xlabel('輸入搖桿角度 \theta_2 (度)');
-ylabel('\alpha_s ()');
-
-% 閉迴路與模組化差距
-figure;
-
-% 1. 搖撼力差距
-subplot(3,2,1);
-hold on; grid on;
-% 使用 ./ 進行元素除法，並加上 eps 避免除以零
-err_Fs = (Fs_m - Fs) ; 
-plot(theta2, err_Fs, 'b-'); 
-hold off;
-title('搖撼力差距 (F_s )');
-ylabel('Error ');
-
-% 2. 搖撼力矩差距
-subplot(3,2,2);
-hold on; grid on;
-err_Ms = (Ms_m - Ms); % 建議取絕對值分母避免負號混淆
-plot(theta2, err_Ms, 'b-');
-hold off;
-title('搖撼力矩差距 (M_s )');
-ylabel('Error ');
-
-% 3. 驅動力矩差距
-subplot(3,2,3);
-hold on; grid on;
-err_M12 = (M12_m - M12);
-plot(theta2, err_M12, 'r-');
-hold off;
-title('驅動力矩差距 (M_{12} )');
-ylabel('Error');
-
-% 4. 接頭受力差距
-subplot(3,2,4);
-hold on; grid on;
-err_F32 = (Fe_m - F32);
-plot(theta2, err_F32, 'r-');
-hold off;
-title('旋轉接頭受力差距 (F_{32} %)');
-ylabel('Error ');
-
-% 5. 搖撼力夾角差距 (處理相位突波)
-subplot(3,2,5);
-hold on; grid on;
-diff_alpha = alphas_m - alphas;
-% 處理角度 360 度跳變問題，將誤差限制在 -180 到 180 之間
-diff_alpha = mod(diff_alpha + 180, 360) - 180;
-% 這裡建議畫絕對角度差 (度)，不要畫百分比，因為角度 0 度時百分比無意義
-plot(theta2, diff_alpha, 'r--'); 
-hold off;
-title('搖撼力夾角差距 (\Delta \alpha_s)');
-ylabel('Error (deg)');
-
-% 兩方法的質心加速度，看0位置
-figure;
-
-% 1. ag2
-subplot(2,2,1);
-hold on; grid on;
-plot(theta2, ag4, 'b-','LineWidth',3); 
-plot(theta2, ag2_m, 'r-'); 
-hold off;
-title('第一桿的質心加速度');
-ylabel('Error ');
-
-% 2. ag3
-subplot(2,2,2);
-hold on; grid on;
-plot(theta2, ag3, 'b-','LineWidth',3);
-plot(theta2, ag3_m, 'r-');
-hold off;
-title('搖撼力矩差距 (M_s )');
-ylabel('Error ');
-
-% 3. d2
-subplot(2,2,3);
-hold on; grid on;
-plot(theta2, d2, 'b-','LineWidth',2); 
-hold off;
-title('d2');
-ylabel('d2 ');
-
-% 3. d3
-subplot(2,2,4);
-hold on; grid on;
-plot(theta2, d3, 'b-','LineWidth',2); 
-hold off;
-title('d3');
-ylabel('d3 ');
 
 % 1128：快完全一樣了，但跟桿3有關的力在大約80度和330度左右有點點差距
+

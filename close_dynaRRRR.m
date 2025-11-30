@@ -4,7 +4,6 @@ clc; clear; close all;
 
 %% 運動學分析
 % 4R planar mechanism
-
 % Condition
 C = 2;
 r1 = 0.06;
@@ -20,7 +19,6 @@ t2dd = 0;
 theta2 = 0:1:360;
 theta3 = [];
 theta4 = [];
-
 
 % deg to rad
 dtr = pi/180;
@@ -182,8 +180,7 @@ xlabel('輸入搖桿角度 \theta_2 (度)');
 ylabel('\alpha_s ()');
 
 
-
-
 % 1128：快完全一樣了，但跟桿3有關的力在大約80度和330度左右有點點差距
+
 
 

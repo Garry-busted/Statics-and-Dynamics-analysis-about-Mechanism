@@ -55,7 +55,6 @@ for i = 1:length(theta2)
     Y = [-r2*t2d*sin(t2(i)); -r2*t2d*cos(t2(i))];
     X = V\Y;
     t3d(i) = X(1);
-    theta3_2(i) = (r2*t2d/r3) * sin(t2(i)-t4(i)) / sin(t4(i) - t3(i));
     t4d(i) = X(2);
 
     % angular acceleration
@@ -70,9 +69,9 @@ end
 %% 閉迴路動力分析
 % 參數
 b2 = 0.01; b3 = 0.05; b4 = 0.04;
-m2 = 6 ;m3 = 30; m4 = 20;
+m2 = 6*0.001 ;m3 = 30*0.001; m4 = 20*0.001;
 phi2 = 0; phi3 = 0; phi4 = 0;
-I3 = 300*0.0001; I4 = 100*0.0001;
+I3 = 300*0.0001*0.001; I4 = 100*0.0001*0.001;
 
 for i = 1:length(t2)
     [F12x(i), F12y(i), F23x(i), F23y(i), F34x(i), F34y(i), F14x(i), F14y(i), M12(i), Fs(i), alphas(i), Ms(i), F32(i), A, ag2(i), ag3(i), ag4(i)] = dynaRRRR(r1,r2,r3,r4,b2,b3,b4,t2(i),t3(i),t4(i),t2d,t3d(i),t4d(i),t3dd(i),t4dd(i),phi2,phi3,phi4,m2,m3,m4,I3,I4);
@@ -80,26 +79,27 @@ end
 
 %% 模組化動力分析
 for i = 1:length(t2)
-    % 1. 執行模組計算 (記得輸入 r3)
-    [L4(i),L3(i),h4(i),h3(i),Q(i),P(i),tQ(i),tP(i),ag2_m(i),ag3_m(i),d2(i),d3(i)] = preForceRR(r4,t4(i),t3(i),phi4,phi3,m4,m3,b4,b3,I4,I3,t4d(i),t3d(i),t4dd(i),t3dd(i),r3);
-    [F34_m(i),F34t_m(i),F34n_m(i),Fex_m(i),Fey_m(i),F14x_m(i),F14y_m(i)] = ForceRR(P(i),Q(i),0,0,r4,r3,L4(i),L3(i),h4(i),h3(i),t4(i),t3(i),tP(i),tQ(i));
+    % 模組t3 -> t3p
+    t3p(i) = t3(i) + pi;
+    [L4(i),L3(i),h4(i),h3(i),Q(i),P(i),tQ(i),tP(i),ag2_m(i),ag3_m(i),tag2(i),tag3(i),d2(i),d3(i)] = preForceRR(r4,t4(i),t3p(i),phi4,phi3,m4,m3,b4,b3,I4,I3,t4d(i),t3d(i),t4dd(i),t3dd(i));
+    [F34_m(i),F34t_m(i),F34n_m(i),Fex_m(i),Fey_m(i),F14x_m(i),F14y_m(i)] = ForceRR(P(i),Q(i),0,0,r4,r3,L4(i),L3(i),h4(i),h3(i),t4(i),t3p(i),tP(i),tQ(i));
     
     Fe_m(i) = sqrt(Fex_m(i)^2 + Fey_m(i)^2);
-    
-    % 2. 計算 M12 (修正符號: rx*Fy - ry*Fx)
-    % r_x = r2*cos(t2), r_y = r2*sin(t2)
-    M12_m(i) = -(r2*cos(t2(i))) * Fey_m(i) + (r2*sin(t2(i))) * Fex_m(i);
-    
-    % 3. 計算 F12 (修正符號: F12 = Fex + m*a)
+   
     % 需重新計算 Link 2 加速度向量
     ag2x_current = -b2 * t2d^2 * cos(t2(i) + phi2) - b2 * t2dd * sin(t2(i) + phi2);
     ag2y_current = -b2 * t2d^2 * sin(t2(i) + phi2) + b2 * t2dd * cos(t2(i) + phi2);
+    % 2. 計算 M12
+    M12_m(i) = -(r2*cos(t2(i))) * Fey_m(i) + (r2*sin(t2(i))) * Fex_m(i) ...
+    + b2*sin(t2(i)+phi2)*m2*ag2x_current - b2*cos(t2(i)+phi2)*m2*ag2y_current;
     
+    % 3. 計算 F12
     % 1128：改質心加速度的負號就結束了
+    % 1130：對的負號，這裡應當為慣性力
     F12x_m(i) = Fex_m(i) - m2 * ag2x_current;
     F12y_m(i) = Fey_m(i) - m2 * ag2y_current;
     
-    % 4. 計算搖撼力與力矩 (公式不變，但依賴於修正後的 F12, M12)
+    % 4. 計算搖撼力與力矩
     Fs_m(i) = sqrt((F12x_m(i) + F14x_m(i))^2 + (F12y_m(i) + F14y_m(i))^2);
     alphas_m(i) = atan2(F12y_m(i) + F14y_m(i), F12x_m(i) + F14x_m(i)) * 180 / pi;
     
@@ -201,7 +201,7 @@ grid on;
 plot(theta2, F32);
 plot(theta2, Fe_m, '-r');
 hold off;
-title('玄轉接頭受力 (F_{32})');
+title('旋轉接頭受力 (F_{32})');
 xlabel('輸入搖桿角度 \theta_2 (度)');
 ylabel('F_32 ()');
 
@@ -249,7 +249,7 @@ hold on;
 grid on;
 plot(theta2, Fe_m, '-r');
 hold off;
-title('模組化玄轉接頭受力 (F_{32})');
+title('模組化旋轉接頭受力 (F_{32})');
 xlabel('輸入搖桿角度 \theta_2 (度)');
 ylabel('F_32 ()');
 
@@ -261,6 +261,16 @@ hold off;
 title('搖撼力夾角 (\alpha_s)');
 xlabel('輸入搖桿角度 \theta_2 (度)');
 ylabel('\alpha_s ()');
+
+subplot(3,2,6);
+hold on;
+grid on;
+plot(theta2, h4, '--b');
+plot(theta2, h3, '--r');
+hold off;
+title('h');
+xlabel('輸入搖桿角度 \theta_2 (度)');
+ylabel('h');
 
 % 閉迴路與模組化差距
 figure;
@@ -318,7 +328,7 @@ ylabel('Error (deg)');
 figure;
 
 % 1. ag2
-subplot(2,2,1);
+subplot(3,2,1);
 hold on; grid on;
 plot(theta2, ag4, 'b-','LineWidth',3); 
 plot(theta2, ag2_m, 'r-'); 
@@ -327,28 +337,52 @@ title('第一桿的質心加速度');
 ylabel('Error ');
 
 % 2. ag3
-subplot(2,2,2);
+subplot(3,2,2);
 hold on; grid on;
 plot(theta2, ag3, 'b-','LineWidth',3);
 plot(theta2, ag3_m, 'r-');
 hold off;
-title('搖撼力矩差距 (M_s )');
+title('第二桿的質心加速度');
 ylabel('Error ');
 
 % 3. d2
-subplot(2,2,3);
+subplot(3,2,3);
 hold on; grid on;
 plot(theta2, d2, 'b-','LineWidth',2); 
 hold off;
 title('d2');
 ylabel('d2 ');
 
-% 3. d3
-subplot(2,2,4);
+% 4. d3
+subplot(3,2,4);
 hold on; grid on;
 plot(theta2, d3, 'b-','LineWidth',2); 
 hold off;
 title('d3');
 ylabel('d3 ');
 
-% 1128：快完全一樣了，但跟桿3有關的力在大約80度和330度左右有點點差距
+% 5. tag2
+subplot(3,2,5);
+hold on; grid on;
+plot(theta2, tag2*180/pi, 'b-','LineWidth',2); 
+plot(theta2, tQ*180/pi, 'r-','LineWidth',2); 
+hold off;
+title('tag2');
+ylabel('tag2');
+
+% 6. tag3
+subplot(3,2,6);
+hold on; grid on;
+plot(theta2, tag3*180/pi, 'b-','LineWidth',2); 
+hold off;
+title('tag3');
+ylabel('tag3');
+
+% 1128
+% 快完全一樣了，但跟桿3有關的力在大約80度和330度左右有點點差距
+% 1129 
+% preForceRR的t3應該要是t3p，其對應的幾何補償要好好確認。 
+% 目前兩方法在不對的地方，看起來與t4dd交於y=0的附近有關係
+% 1130
+% 誤差跟質量沒關?
+% 把h的正負號改變即可完美了

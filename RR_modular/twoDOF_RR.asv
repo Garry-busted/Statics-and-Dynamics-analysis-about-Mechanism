@@ -1,0 +1,136 @@
+clc; clear; close all;
+
+%% 1. 參數設定 (對應您的變數與文獻)
+% User Link 2 = Paper Link 1
+% User Link 3 = Paper Link 2
+r2 = 0.3;   % Paper l1
+r3 = 0.3;   % Paper l2 (not used in eq directly but length)
+m2 = 3;     % Paper m1
+m3 = 0.5;   % Paper m2
+I2 = 0.5;   % Paper Is1
+I3 = 0.05;  % Paper Is2
+b2 = 0.15;  % Paper l_AS1 (注意：文獻是0.15, 您原本寫0.25)
+b3 = 0.15;  % Paper l_BS2 (注意：文獻是0.15)
+g = 9.806;
+
+%% 2. 軌跡規劃 (Trajectory Planning) - 五次多項式
+% 時間設定
+T_total = 1.0; % 總時間 1秒
+dt = 0.01;     % 解析度
+time = 0:dt:T_total; 
+
+% 邊界條件 (Boundary Conditions)
+% Link 2 (Paper theta1): 0 -> 30度
+t2_i = 0 * pi/180; 
+t2_f = 30 * pi/180;
+
+% Link 3 (Paper theta2): 60 -> 90度
+t3_i = 60 * pi/180;
+t3_f = 90 * pi/180;
+
+% 使用五次多項式產生位置、速度、加速度
+[q2, q2d, q2dd] = quintic_traj(t2_i, t2_f, T_total, time);
+[q3, q3d, q3dd] = quintic_traj(t3_i, t3_f, T_total, time);
+
+%% 3. 逆向動力學主迴圈
+%% 3. 逆向動力學主迴圈 (修正版)
+T2_torque = zeros(length(time), 1);
+T3_torque = zeros(length(time), 1);
+Shaking_Moment = zeros(length(time), 1); % 新增計算論文圖形用
+
+for i = 1:length(time)
+    % 取得當前瞬間的狀態
+    th1 = q2(i);   th2 = q3(i);
+    w1  = q2d(i);  w2  = q3d(i);
+    a1  = q2dd(i); a2  = q3dd(i);
+    
+    % --- 嚴格依照文獻 Eq. 4 ~ 14 建立係數 ---
+    % 慣性項
+    D11 = m2*b2^2 + m3*r2^2 + m3*b3^2 + 2*m3*r2*b3*cos(th2) + I2 + I3;
+    D12 = m3*b3^2 + m3*r2*b3*cos(th2) + I3;
+    D21 = D12;
+    D22 = m3*b3^2 + I3;
+    
+    % *** 關鍵修正：速度項係數 (注意正負號) ***
+    % Eq 8: D122 有負號
+    D122 = -m3*r2*b3*sin(th2); 
+    % Eq 11: D112, D121 是正號
+    D112 = m3*r2*b3*sin(th2);
+    D121 = D112;
+    % Eq 9: D211 是正號
+    D211 = m3*r2*b3*sin(th2); 
+    
+    % 重力項
+    G1 = (m2*b2 + m3*r2)*g*cos(th1) + m3*g*b3*cos(th1+th2);
+    G2 = m3*g*b3*cos(th1+th2);
+    
+    % --- 帶入 Eq. 3 求解力矩 ---
+    % Tau 1 (Base)
+    % 展開公式：D11*a1 + D12*a2 + D122*w2^2 + D112*w1*w2 + D121*w2*w1 + G1
+    T2_torque(i) = D11*a1 + D12*a2 + D122*(w2^2) + (D112+D121)*w1*w2 + G1;
+    
+    % Tau 2 (Elbow)
+    % 展開公式：D21*a1 + D22*a2 + D211*w1^2 + G2
+    T3_torque(i) = D21*a1 + D22*a2 + D211*(w1^2) + G2;
+    
+    % 計算論文定義的 Shaking Moment (Eq 16: Msh = -Tau1)
+    Shaking_Moment(i) = -T2_torque(i);
+end
+
+%% 確認搖撼
+phi2 = 0; phi3 = 0;
+G = 1;
+for i = 1:length(time)
+    q3p(i) = q2(i) + q3(i);
+    [L2(i),L3(i),h2(i),h3(i),Q(i),P(i),tQ(i),tP(i)] = preForceRR(r2,q2(i),q3p(i),phi2,phi3,m2,m3,b2,b3,I2,I3,q2d(i),q3d(i),q2dd(i),q3dd(i));
+    [F32(i),F32t(i),F32n(i),Fex(i),Fey(i),F12x(i),F12y(i)] = ForceRR(P(i),Q(i),T2_torque(i),T3_torque(i),r2,r3,L2(i),L3(i),h2(i),h3(i),q2(i),q3p(i),tP(i),tQ(i),m2,m3,b2,b3,phi2,phi3,G);
+
+    % 搖撼力
+    Fs(i) = sqrt(F12x(i)^2 + F12y(i)^2);
+    Ms(i) = -T2_torque(i);
+end
+
+
+%% 4. 繪圖
+figure;
+subplot(2,1,1);
+plot(time, T2_torque, 'b', 'LineWidth', 1.5); hold on;
+plot(time, T3_torque, 'r', 'LineWidth', 1.5);
+legend('Torque 1 (Base)', 'Torque 2 (Elbow)');
+xlabel('Time (s)'); ylabel('Torque (Nm)');
+grid on; title('Computed Driving Torques');
+
+subplot(2,2,3);
+hold on;
+plot(time, Fs,'b', 'LineWidth', 1.5);
+xticks(0:0.25:1);
+legend('搖撼力');
+xlabel('Time (s)'); 
+ylabel('Fs (N)');
+grid on; 
+title('搖撼力');
+
+subplot(2,2,4);
+hold on;
+plot(time, Ms,'b', 'LineWidth', 1.5);
+xticks(0:0.25:1);
+legend('搖撼力矩');
+xlabel('Time (s)'); 
+ylabel('Torque (Nm)');
+grid on; 
+title('搖撼力矩');
+
+
+%% 5. 輔助函式：五次多項式軌跡
+function [q, qd, qdd] = quintic_traj(qi, qf, T, t_vec)
+    % s(t) = 10(t/T)^3 - 15(t/T)^4 + 6(t/T)^5
+    % 這是標準的 0 到 1 的歸一化五次多項式
+    tau = t_vec / T;
+    s = 10*tau.^3 - 15*tau.^4 + 6*tau.^5;
+    sd = (30*tau.^2 - 60*tau.^3 + 30*tau.^4) / T;
+    sdd = (60*tau - 180*tau.^2 + 120*tau.^3) / (T^2);
+    
+    q = qi + (qf - qi) * s;
+    qd = (qf - qi) * sd;
+    qdd = (qf - qi) * sdd;
+end
